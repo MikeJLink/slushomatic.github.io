@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Slush-o-matic</title>
+  <meta property="og:image" content="images/social.jpg" />
+  <style>
+    /* Basic page styling */
+    body {
+      font-family: sans-serif;
+      margin: 2rem;
+      background: #fafafa;
+      color: #333;
+    }
+    .title {
+      text-transform: uppercase;
+      color: #0066cc;
+      font-family: didot;
+    }
+    .container {
+      max-width: 100%;
+      margin: 0 auto;
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 320px;
+      gap: 2rem;
+    }
+    @media (max-width: 800px) {
+      .main-grid {
+        display: block;
+      }
+    }
+
+    .right-col {
+      position: sticky;
+      top: 0;
+      align-self: start;
+    }
+
+    h1, h2, h3 {
+      margin-bottom: 0.5rem;
+    }
+
+    /* Category headings */
+    .category-block {
+      margin-bottom: 2rem;
+    }
+    .category-title {
+      margin: 1rem 0 0.5rem;
+      font-size: 1.2rem;
+      font-weight: bold;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 0.25rem;
+    }
+
+    /* The grid container for "cards" */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, 180px);
+      max-width: calc((180px * 5) + (1rem * 4));
+      gap: 1rem;
+    }
+    @media (max-width: 600px) {
+      .cards-grid {
+        grid-template-columns: repeat(auto-fit, 180px);
+        max-width: calc((180px * 2) + 1rem);
+      }
+    }
+
+    /* Each card is a label */
+    .card-label {
+      display: block;
+      cursor: pointer;
+    }
+    .card-label input[type="radio"] {
+      display: none; /* hide the actual radio */
+    }
+
+    .radio-card {
+      border: 2px solid #ccc;
+      border-radius: 8px;
+      padding: 0.5rem;
+      text-align: center;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      background: #fff;
+    }
+    .radio-card img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 4px;
+      display: block;
+      margin: 0 auto 0.5rem;
+    }
+    .drink-name {
+      font-weight: bold;
+      display: block;
+      margin-top: 0.25rem;
+    }
+    .card-label input[type="radio"]:checked + .radio-card {
+      border-color: #0066cc;
+      box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2);
+    }
+
+    .slider-container,
+    .abv-slider-container {
+      margin: 1rem 0;
+    }
+    .slider {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 15px;
+      border-radius: 5px;
+      background: #d3d3d3;
+      outline: none;
+      opacity: 0.7;
+      transition: opacity .2s;
+      margin-top: 0.5rem;
+      cursor: pointer;
+    }
+    .slider:hover {
+      opacity: 1;
+    }
+    .slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 25px;
+      height: 25px;
+      border-radius: 50%;
+      background: #0066cc;
+      cursor: pointer;
+    }
+    .slider::-moz-range-thumb {
+      width: 25px;
+      height: 25px;
+      border-radius: 50%;
+      background: #04AA6D;
+      cursor: pointer;
+    }
+
+    .recipe-display {
+      background: #fff;
+      border: 1px solid #ccc;
+      padding: 1rem;
+      border-radius: 8px;
+      margin: 0 0 1rem 0;
+    }
+    .ingredients {
+      list-style-type: none;
+      padding-left: 0;
+      margin-top: 0.5rem;
+    }
+    .ingredients li {
+      margin: 0.25rem 0;
+    }
+
+    .zeroOrNegative {
+      color: red;
+      font-weight: bold;
+    }
+
+    /* We’ll show sugar% in the same line as ABV. */
+    #abvValue,
+    #batchValue,
+    #sugarValue {
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="main-grid">
+    <!-- LEFT COLUMN -->
+    <div class="left-col">
+      <h1 class="title">Slush-o-matic</h1>
+      <div class="recipe-list" id="recipeList"></div>
+    </div>
+
+    <!-- RIGHT COLUMN (sticky recipe) -->
+    <div class="right-col">
+      <div class="slider-container">
+        <h3>Batch Size (oz):
+          <span id="batchValue">19</span>
+        </h3>
+        <input
+          type="range"
+          id="batchSlider"
+          min="16"
+          max="88"
+          step="3"
+          value="19"
+          class="slider"
+        />
+      </div>
+
+      <div class="abv-slider-container">
+        <h3>Adjust Booze (ABV %):
+          <span id="abvValue">9.0%</span>
+        </h3>
+        <input
+          type="range"
+          id="abvSlider"
+          min="2.8"
+          max="16"
+          step="0.1"
+          value="9"
+          class="slider"
+        />
+      </div>
+
+      <div class="recipe-display" id="recipeDisplay">
+        <h3>Recipe:</h3>
+        <p>Select a category &amp; drink, then set your desired batch size + ABV.</p>
+      </div>
+    </div><!-- /.right-col -->
+  </div><!-- /.main-grid -->
+</div><!-- /.container -->
+
+<script>
+  /****************************************************
+   * 0) Approx sugar dictionary: grams sugar per fl oz
+   *    Feel free to adjust or expand. 
+   ****************************************************/
+  const sugarPerOz = {
+    "orange juice": 3.0,
+    "fresh orange juice": 3.0,
+    "pineapple juice": 4,
+    "lime juice": 0.5,
+    "lemon juice": 1.0,
+    "passion fruit juice": 3.1,
+    "watermelon juice": 2.3,
+    "ginger beer": 14.1,
+    "simple syrup": 45.9, 
+    "agave syrup": 19.3,
+    "agave nectar": 67.0,
+    "orgeat": 91.7,
+    "velvet falernum": 81.1,
+    "amaretto": 38.8,
+    "jägermeister": 14.1,
+    "aperol": 24.7,
+    "cointreau": 24,
+    "campari": 28.2,
+    "zucca rabarbaro": 31.7,
+    // Wines/fortified
+    "cocchi americano": 19.8,
+    "amontillado sherry": 3.1,
+    // others
+    "cream of coconut": 63.5,
+    "lemon-lime soda": 11.1,
+
+    "default": 0.0
+  };
+
+  function getSugarGPerOz(itemName) {
+    const lower = itemName.toLowerCase();
+    // We'll do partial checks so "fresh orange juice" matches "orange juice"
+    // or "lime juice" matches "lime juice"
+    for (let key of Object.keys(sugarPerOz)) {
+      if (lower.includes(key)) {
+        return sugarPerOz[key];
+      }
+    }
+    return sugarPerOz.default;
+  }
+
+  /********************************************************
+   * 1) Define categories & recipes
+   *    (Paste your full categories array. Below is a short
+   *     example snippet. Just expand as needed.)
+   ********************************************************/
+  const categories = [
+    {
+      name: "Tequila & Mezcal",
+      recipes: [
+        {
+          name: "Mango Margarita",
+          imgUrl: "images/mango-margarita.jpg",
+          sourceUrl: "https://punchdrink.com/recipes/mango-margarita/",
+          ingredients: [
+            { item: "Blanco Tequila",  base16: 2,    isAlcohol: true,  abvDecimal: 0.40 },
+            { item: "Orange Liqueur",  base16: 0.75, isAlcohol: true,  abvDecimal: 0.40 },
+            { item: "Mezcal",          base16: 0.25, isAlcohol: true,  abvDecimal: 0.40 },
+            { item: "Fresh Lime Juice",base16: 2,    isAlcohol: false, abvDecimal: 0 },
+            { item: "Simple Syrup",    base16: 2,    isAlcohol: false, abvDecimal: 0 },
+            { item: "Mango Puree",     base16: 8,    isAlcohol: false, abvDecimal: 0 },
+            { item: "Water",           base16: 0.5,  isAlcohol: false, abvDecimal: 0 }
+          ]
+        },
+        {
+          name: "Haley Traub’s Frozen Margarita",
+          imgUrl: "images/haley-traubs-frozen-margarita.jpg",
+          sourceUrl: "https://punchdrink.com/recipes/haley-traubs-frozen-margarita/",
+          ingredients: [
+            { item: "Blanco Tequila",  base16: 2,    isAlcohol: true,  abvDecimal: 0.40 },
+            { item: "Cointreau",       base16: 1.25, isAlcohol: true,  abvDecimal: 0.40 },
+            { item: "Fresh Lime Juice",base16: 1.25, isAlcohol: false, abvDecimal: 0 },
+            { item: "Fresh Orange Juice",base16: 0.33,isAlcohol: false,abvDecimal: 0 },
+            { item: "Agave Nectar",    base16: 0.5,  isAlcohol: false, abvDecimal: 0 },
+            { item: "Water",           base16: 10.7, isAlcohol: false, abvDecimal: 0 }
+          ]
+        },
+        {
+          name: "Life of Peach",
+          imgUrl: "images/life-of-peach.jpg",
+          sourceUrl: "https://punchdrink.com/recipes/life-of-peach/",
+          ingredients: [
+            { item: "Chile-Infused Tequila", base16: 1.5, isAlcohol: true,  abvDecimal: 0.40 },
+            { item: "Zucca Rabarbaro",       base16: 0.5, isAlcohol: true,  abvDecimal: 0.30 },
+            { item: "Peach Puree",           base16: 0.75,isAlcohol: false, abvDecimal: 0 },
+            { item: "Lime Juice",            base16: 0.5, isAlcohol: false, abvDecimal: 0 },
+            { item: "Agave Syrup (1:1)",     base16: 1,   isAlcohol: false, abvDecimal: 0 },
+            { item: "Water",                base16: 10.75,isAlcohol: false, abvDecimal: 0 }
+          ]
+        },
+        {
+          name: "Watermelon Sgroppino",
+          imgUrl: "images/watermelon-sgroppino.jpg",
+          sourceUrl: "https://punchdrink.com/recipes/watermelon-sgroppino/",
+          ingredients: [
+            { item: "Mezcal",          base16: 3,    isAlcohol: true,  abvDecimal: 0.40 },
+            { item: "Watermelon Juice",base16: 8,    isAlcohol: false, abvDecimal: 0 },
+            { item: "Simple Syrup",    base16: 4,    isAlcohol: false, abvDecimal: 0 },
+            { item: "Lime Juice",      base16: 1,    isAlcohol: false, abvDecimal: 0 },
+            { item: "Water",           base16: 0.5,  isAlcohol: false, abvDecimal: 0 }
+          ]
+        },
+        {
+          name: "The Cuj (Negroni/Margarita)",
+          imgUrl: "images/cuj.jpg",
+          sourceUrl: "https://punchdrink.com/recipes/the-cuj/",
+          ingredients: [
+            { item: "Blanco Tequila", base16: 1.5, isAlcohol: true, abvDecimal: 0.40 },
+            { item: "Aperol",         base16: 1,   isAlcohol: true, abvDecimal: 0.11 },
+            { item: "Suze",          base16: 0.25, isAlcohol: true, abvDecimal: 0.20 },
+            { item: "Lime Juice",    base16: 0.75, isAlcohol: false,abvDecimal: 0 },
+            { item: "Passion Fruit Juice", base16: 0.75, isAlcohol: false, abvDecimal: 0 },
+            { item: "Orange Juice",  base16: 1,   isAlcohol: false, abvDecimal: 0 },
+            { item: "Simple Syrup",  base16: 0.25, isAlcohol: false,abvDecimal: 0 },
+            { item: "Water",         base16: 10.5, isAlcohol: false,abvDecimal: 0 }
+          ]
+        }
+      ]
+    },
+    {
+      name: "Amari & Liqueurs",
+      recipes: [
+        {
+          name: "Frozen Garibaldi",
+          imgUrl: "images/garibaldi.jpg",
+          sourceUrl: "https://punchdrink.com/recipes/frozen-garibaldi/",
+          ingredients: [
+            { item: "Fresh Orange Juice", base16: 3.5, isAlcohol: false, abvDecimal: 0 },
+            { item: "Campari",           base16: 1.5,  isAlcohol: true,  abvDecimal: 0.24 },
+            { item: "Simple Syrup",      base16: 0.5,  isAlcohol: false, abvDecimal: 0 },
+            { item: "Water",             base16: 10.5, isAlcohol: false, abvDecimal: 0 }
+          ]
+        },
+        {
+          name: "Manolito’s Swampwater",
+          imgUrl: "images/manolitos-swampwater.jpg",
+          sourceUrl: "https://punchdrink.com/recipes/manolitos-swampwater/",
+          ingredients: [
+            { item: "Green Chartreuse",   base16: 2.5, isAlcohol: true,  abvDecimal: 0.55 },
+            { item: "Pineapple Juice",    base16: 1,   isAlcohol: false, abvDecimal: 0 },
+            { item: "Lime Juice",         base16: 0.5, isAlcohol: false, abvDecimal: 0 },
+            { item: "Simple Syrup",       base16: 0.5, isAlcohol: false, abvDecimal: 0 },
+            { item: "Water",              base16: 11.5,isAlcohol: false, abvDecimal: 0 }
+          ]
+        },
+        {
+          name: "Amaretto Sour Frappe",
+          imgUrl: "images/amaretto-sour-frappe.jpg",
+          sourceUrl: "https://punchdrink.com/recipes/amaretto-sour-frappe/",
+          ingredients: [
+            { item: "Amaretto",     base16: 2,    isAlcohol: true,  abvDecimal: 0.28 },
+            { item: "Lemon Juice",  base16: 1,    isAlcohol: false, abvDecimal: 0 },
+            { item: "Pineapple Juice", base16: 0.75, isAlcohol: false, abvDecimal: 0 },
+            { item: "Simple Syrup", base16: 0.5,  isAlcohol: false, abvDecimal: 0 },
+            { item: "Water",        base16: 11.75,isAlcohol: false, abvDecimal: 0 }
+          ]
+        },
+        {
+          name: "Frozen Jägerita",
+          imgUrl: "images/jagerita.jpg",
+          sourceUrl: "https://punchdrink.com/recipes/jagerita/",
+          ingredients: [
+            { item: "Jägermeister", base16: 2.5,  isAlcohol: true,  abvDecimal: 0.35 },
+            { item: "Cointreau",    base16: 1.25, isAlcohol: true,  abvDecimal: 0.40 },
+            { item: "Lime Juice",   base16: 1.25, isAlcohol: false, abvDecimal: 0 },
+            { item: "Simple Syrup", base16: 1.25, isAlcohol: false, abvDecimal: 0 },
+            { item: "Water",        base16: 9.75, isAlcohol: false, abvDecimal: 0 }
+          ]
+        }
+      ]
+    },
+    {
+      name: "Gin",
+      recipes: [
+        {
+          name: "Lemony Snicker",
+          imgUrl: "images/lemony-snicker.jpg",
+          sourceUrl: "https://punchdrink.com/recipes/lemony-snicker/",
+          ingredients: [
+            { item: "Japanese/London Dry Gin",base16: 2.25, isAlcohol: true,  abvDecimal: 0.40 },
+            { item: "Meyer Lemon Juice",       base16: 0.5,  isAlcohol: false, abvDecimal: 0 },
+            { item: "Bianco Vermouth",         base16: 0.5,  isAlcohol: true,  abvDecimal: 0.15 },
+            { item: "Lemon-Lime Soda",         base16: 3,    isAlcohol: false, abvDecimal: 0 },
+            { item: "Lemon Sorbet",            base16: 6,    isAlcohol: false, abvDecimal: 0 },
+            { item: "Water",                   base16: 3.75, isAlcohol: false, abvDecimal: 0 }
+          ]
+        },
+        {
+          name: "The Saturn (Gin Tiki)",
+          imgUrl: "images/saturn.jpg",
+          sourceUrl: "https://punchdrink.com/recipes/the-saturn/",
+          ingredients: [
+            { item: "Gin",                   base16: 2.25, isAlcohol: true,  abvDecimal: 0.40 },
+            { item: "Lemon Juice",           base16: 0.75, isAlcohol: false, abvDecimal: 0 },
+            { item: "Orgeat",                base16: 0.75, isAlcohol: false, abvDecimal: 0 },
+            { item: "Passion Fruit Puree",   base16: 0.5,  isAlcohol: false, abvDecimal: 0 },
+            { item: "Velvet Falernum",       base16: 0.5,  isAlcohol: true,  abvDecimal: 0.11 },
+            { item: "Water",                 base16: 11.25,isAlcohol: false, abvDecimal: 0 }
+          ]
+        },
+        {
+          name: "Frozen Negroni",
+          imgUrl: "images/negroni.jpg",
+          sourceUrl: "https://punchdrink.com/recipes/frozen-negroni/",
+          ingredients: [
+            { item: "Gin",           base16: 1.5, isAlcohol: true, abvDecimal: 0.40 },
+            { item: "Campari",       base16: 1.5, isAlcohol: true, abvDecimal: 0.24 },
+            { item: "Sweet Vermouth",base16: 1.5, isAlcohol: true, abvDecimal: 0.15 },
+            { item: "Orange Juice",  base16: 1,   isAlcohol: false,abvDecimal: 0 },
+            { item: "Simple Syrup",  base16: 1,   isAlcohol: false,abvDecimal: 0 },
+            { item: "Water",         base16: 8,   isAlcohol: false,abvDecimal: 0 }
+          ]
+        },
+        {
+          name: "Strawberry Negroni",
+          imgUrl: "images/strawberry-negroni.jpg",
+          sourceUrl: "https://punchdrink.com/recipes/strawberry-negroni/",
+          ingredients: [
+            { item: "Gin",            base16: 1.5, isAlcohol: true, abvDecimal: 0.40 },
+            { item: "Campari",        base16: 1.5, isAlcohol: true, abvDecimal: 0.24 },
+            { item: "Sweet Vermouth", base16: 1.5, isAlcohol: true, abvDecimal: 0.15 },
+            { item: "Orange Juice",   base16: 1.25,isAlcohol: false,abvDecimal: 0 },
+            { item: "Simple Syrup",   base16: 0.75,isAlcohol: false,abvDecimal: 0 },
+            { item: "Strawberry Puree",base16:1,   isAlcohol: false,abvDecimal: 0 },
+            { item: "Water",          base16: 8,   isAlcohol: false,abvDecimal: 0 }
+          ]
+        }
+      ]
+    },
+    {
+      name: "Rum",
+      recipes: [
+        {
+          name: "Daiquiri Frappé",
+          imgUrl: "images/daiquiri-frappe.jpg",
+          sourceUrl: "https://punchdrink.com/recipes/daiquiri-frappe/",
+          ingredients: [
+            { item: "White Rum",       base16: 2.25, isAlcohol: true,  abvDecimal: 0.40 },
+            { item: "Lime Juice",      base16: 0.8,  isAlcohol: false, abvDecimal: 0 },
+            { item: "Simple Syrup",    base16: 0.8,  isAlcohol: false, abvDecimal: 0 },
+            { item: "Lime Zest (tsp)", base16: 0.25, isAlcohol: false, abvDecimal: 0 },
+            { item: "Water",           base16: 11,   isAlcohol: false, abvDecimal: 0 }
+          ]
+        },
+        {
+          name: "Espresso Martini Granita",
+          imgUrl: "images/espresso-martini-granita.jpg",
+          sourceUrl: "https://punchdrink.com/recipes/espresso-martini-granita/",
+          ingredients: [
+            { item: "White/Light Rum", base16: 4,    isAlcohol: true,  abvDecimal: 0.40 },
+            { item: "Fresh Espresso",  base16: 6,    isAlcohol: false, abvDecimal: 0 },
+            { item: "Simple Syrup",    base16: 2,    isAlcohol: false, abvDecimal: 0 },
+            { item: "Water",           base16: 4,    isAlcohol: false, abvDecimal: 0 }
+          ]
+        },
+        {
+          name: "Daiquiri Menta",
+          imgUrl: "images/daiquiri-menta.jpg",
+          sourceUrl: "https://punchdrink.com/recipes/daiquiri-menta/",
+          ingredients: [
+            { item: "White Rum",              base16: 2,    isAlcohol: true,  abvDecimal: 0.40 },
+            { item: "Lime Juice",             base16: 0.75, isAlcohol: false, abvDecimal: 0 },
+            { item: "Simple Syrup",           base16: 1,    isAlcohol: false, abvDecimal: 0 },
+            { item: "Crème de Menthe (white)",base16: 0.5,  isAlcohol: true,  abvDecimal: 0.30 },
+            { item: "Water",                  base16: 11,   isAlcohol: false, abvDecimal: 0 }
+          ]
+        }
+      ]
+    },
+    {
+      name: "Vodka",
+      recipes: [
+        {
+          name: "Frozen Sgroppino",
+          imgUrl: "images/sgroppino.jpg",
+          sourceUrl: "https://punchdrink.com/recipes/frozen-sgroppino/",
+          ingredients: [
+            { item: "Vodka",      base16: 3, isAlcohol: true,  abvDecimal: 0.40 },
+            { item: "Limoncello", base16: 3, isAlcohol: true,  abvDecimal: 0.28 },
+            { item: "Prosecco",   base16: 3, isAlcohol: true,  abvDecimal: 0.11 },
+            { item: "Lemon Sorbet", base16: 6, isAlcohol: false, abvDecimal: 0 },
+            { item: "Water",      base16: 1, isAlcohol: false, abvDecimal: 0 }
+          ]
+        },
+        {
+          name: "Frozen Moscow Mule",
+          imgUrl: "images/moscow-mule.jpg",
+          sourceUrl: "https://punchdrink.com/recipes/frozen-moscow-mule/",
+          ingredients: [
+            { item: "Vodka",               base16: 2.5, isAlcohol: true,  abvDecimal: 0.40 },
+            { item: "Ginger Beer (flat)",  base16: 4,   isAlcohol: false, abvDecimal: 0 },
+            { item: "Lime Juice",          base16: 1,   isAlcohol: false, abvDecimal: 0 },
+            { item: "Simple Syrup",        base16: 1,   isAlcohol: false, abvDecimal: 0 },
+            { item: "Water",               base16: 7.5, isAlcohol: false, abvDecimal: 0 }
+          ]
+        }
+      ]
+    },
+    {
+      name: "Fortified & Aperitif Wines",
+      recipes: [
+        {
+          name: "Frozen Italian Mojito",
+          imgUrl: "images/italian-mojito.jpg",
+          sourceUrl: "https://punchdrink.com/recipes/frozen-italian-mojito/",
+          ingredients: [
+            { item: "Cocchi Americano", base16: 3,  isAlcohol: true,  abvDecimal: 0.165 },
+            { item: "Fresh Lime Juice", base16: 1,  isAlcohol: false, abvDecimal: 0 },
+            { item: "Simple Syrup",     base16: 1,  isAlcohol: false, abvDecimal: 0 },
+            { item: "Water",            base16: 11, isAlcohol: false, abvDecimal: 0 }
+          ]
+        },
+        {
+          name: "Frozen Sherry Cobbler",
+          imgUrl: "images/sherry-cobbler.jpg",
+          sourceUrl: "https://punchdrink.com/recipes/frozen-sherry-cobbler/",
+          ingredients: [
+            { item: "Amontillado Sherry", base16: 4,   isAlcohol: true,  abvDecimal: 0.17 },
+            { item: "Simple Syrup",       base16: 1.5, isAlcohol: false, abvDecimal: 0 },
+            { item: "Lemon Juice",        base16: 1.25,isAlcohol: false, abvDecimal: 0 },
+            { item: "Water",              base16: 9.75,isAlcohol: false, abvDecimal: 0 }
+          ]
+        }
+      ]
+    },
+    {
+      name: "Cognac/Brandy",
+      recipes: [
+        {
+          name: "City Island Colada (Henny Colada)",
+          imgUrl: "images/city-island-colada.jpg",
+          sourceUrl: "https://punchdrink.com/recipes/city-island-colada/",
+          ingredients: [
+            { item: "Hennessy VS (Cognac)",base16: 1.5, isAlcohol: true,  abvDecimal: 0.40 },
+            { item: "Cream of Coconut",    base16: 1.5, isAlcohol: false, abvDecimal: 0 },
+            { item: "Pineapple Juice",     base16: 1.5, isAlcohol: false, abvDecimal: 0 },
+            { item: "Water",              base16: 11.5, isAlcohol: false, abvDecimal: 0 }
+          ]
+        }
+      ]
+    }
+  ];
+
+  /*********************************************************
+   * 2) Flatten them into a single 'allRecipes' array
+   *********************************************************/
+  const allRecipes = [];
+  const recipeListEl = document.getElementById("recipeList");
+
+  let currentIndex = 0;
+  categories.forEach(cat => {
+    const categoryBlock = document.createElement("div");
+    categoryBlock.className = "category-block";
+
+    const catTitle = document.createElement("div");
+    catTitle.className = "category-title";
+    catTitle.textContent = cat.name;
+    categoryBlock.appendChild(catTitle);
+
+    const cardsGrid = document.createElement("div");
+    cardsGrid.className = "cards-grid";
+
+    cat.recipes.forEach(recipe => {
+      allRecipes.push(recipe);
+
+      const labelEl = document.createElement("label");
+      labelEl.className = "card-label";
+
+      const radioEl = document.createElement("input");
+      radioEl.type = "radio";
+      radioEl.name = "drink";
+      radioEl.value = currentIndex;
+      if (currentIndex === 0) {
+        radioEl.checked = true;
+      }
+
+      const cardDiv = document.createElement("div");
+      cardDiv.className = "radio-card";
+
+      const imgEl = document.createElement("img");
+      imgEl.src = recipe.imgUrl;
+      imgEl.alt = recipe.name;
+
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "drink-name";
+      nameSpan.textContent = recipe.name;
+
+      cardDiv.appendChild(imgEl);
+      cardDiv.appendChild(nameSpan);
+      labelEl.appendChild(radioEl);
+      labelEl.appendChild(cardDiv);
+      cardsGrid.appendChild(labelEl);
+
+      currentIndex++;
+    });
+
+    categoryBlock.appendChild(cardsGrid);
+    recipeListEl.appendChild(categoryBlock);
+  });
+
+  /*********************************************************
+   * 3) Grab references to sliders + display
+   *********************************************************/
+  const batchSliderEl   = document.getElementById("batchSlider");
+  const batchValueEl    = document.getElementById("batchValue");
+  const abvSliderEl     = document.getElementById("abvSlider");
+  const abvValueEl      = document.getElementById("abvValue");
+  const recipeDisplayEl = document.getElementById("recipeDisplay");
+
+  recipeListEl.addEventListener("change", updateAll);
+  batchSliderEl.addEventListener("input", updateAll);
+  abvSliderEl.addEventListener("input", updateAll);
+
+  // Initialize
+  updateAll();
+
+  /*********************************************************
+   * 4) Main update function, with TWO PASS sugar recalc
+   *********************************************************/
+  function updateAll() {
+    // 1) Basic slider readouts
+    batchValueEl.textContent = batchSliderEl.value;
+    abvValueEl.textContent   = abvSliderEl.value + "%";
+
+    // 2) Find which recipe is chosen
+    const selectedRadio = document.querySelector('input[name="drink"]:checked');
+    if (!selectedRadio) return;
+    const recipeIndex = parseInt(selectedRadio.value, 10);
+    const recipe = allRecipes[recipeIndex];
+
+    // 3) Scale everything from 16 -> user batch
+    const batchSize = parseInt(batchSliderEl.value, 10);
+    let desiredABV   = parseFloat(abvSliderEl.value);
+
+    let totalVolScaled     = 0;
+    let totalEthanolScaled = 0;
+    const ratio = batchSize / 16;
+
+    // PASS #1: scale volumes, compute sugar & ABV
+    let totalSugarGrams = 0;
+    let scaled = recipe.ingredients.map(ing => {
+      const scaledVol = ing.base16 * ratio; // in oz
+      const ethanolOz = ing.isAlcohol
+        ? scaledVol * ing.abvDecimal
+        : 0;
+
+      totalVolScaled     += scaledVol;
+      totalEthanolScaled += ethanolOz;
+
+      // SUGAR for pass #1
+      const sugarG = getSugarGPerOz(ing.item) * scaledVol;
+      totalSugarGrams += sugarG;
+
+      return {
+        ...ing,
+        scaledVol,
+        ethanolOz
+      };
+    });
+
+    // current ABV
+    let currentABV = (totalEthanolScaled / totalVolScaled) * 100;
+
+    // clamp ABV slider
+    if (desiredABV < 2.8)  desiredABV = 2.8;
+    if (desiredABV > 16)   desiredABV = 16;
+
+    // 4) If ABV mismatch, re-scale alcoholic ingredients & water
+    if (Math.abs(desiredABV - currentABV) > 0.01) {
+      const desiredEthanolOz = (desiredABV / 100) * totalVolScaled;
+      let ratioEthanol = 1;
+      if (totalEthanolScaled > 0) {
+        ratioEthanol = desiredEthanolOz / totalEthanolScaled;
+      }
+
+      let newTotalVol = 0;
+      let newTotalEthanol = 0;
+
+      scaled.forEach(obj => {
+        if (obj.isAlcohol) {
+          obj.scaledVol *= ratioEthanol; 
+          obj.ethanolOz  = obj.scaledVol * obj.abvDecimal;
+        }
+        newTotalVol     += obj.scaledVol;
+        newTotalEthanol += obj.ethanolOz;
+      });
+
+      // adjust water
+      const volumeDiff = totalVolScaled - newTotalVol;
+      const waterIng   = scaled.find(o => o.item.toLowerCase().includes("water"));
+      if (waterIng) {
+        waterIng.scaledVol += volumeDiff;
+        waterIng.ethanolOz = waterIng.scaledVol * (waterIng.abvDecimal || 0);
+      }
+
+      // recalc ABV with updated volumes
+      newTotalVol     = scaled.reduce((acc, x) => acc + x.scaledVol, 0);
+      newTotalEthanol = scaled.reduce((acc, x) => acc + x.ethanolOz, 0);
+      currentABV      = (newTotalEthanol / newTotalVol) * 100;
+
+      // PASS #2: re-sum sugar with updated volumes
+      totalSugarGrams = 0;
+      scaled.forEach(obj => {
+        const sugarGPerOz = getSugarGPerOz(obj.item);
+        totalSugarGrams += sugarGPerOz * obj.scaledVol;
+      });
+
+      // update totalVolScaled to the final new volume
+      totalVolScaled = newTotalVol;
+    }
+
+    // final ABV
+    abvSliderEl.value      = desiredABV.toFixed(1);
+    abvValueEl.textContent = currentABV.toFixed(1) + "%";
+
+    // 5) compute sugar% by weight
+    // approximate total mass = totalVolScaled (fl oz) * 29.57 (g/oz)
+    const totalMassGrams = totalVolScaled * 29.57;
+    const sugarPercent   = (totalSugarGrams / totalMassGrams) * 100;
+
+    // 6) Build recipe display
+    let html = `<h3>${recipe.name}</h3>`;
+    html += `<ul class="ingredients">`;
+
+    scaled.forEach(ing => {
+      const finalVol = parseFloat(ing.scaledVol.toFixed(1));
+      if (finalVol <= 0) {
+        // skip negative/zero volumes
+        return;
+      }
+      const cls = finalVol < 0 ? "zeroOrNegative" : "";
+      html += `<li class="${cls}">${ing.item}: ${finalVol} oz</li>`;
+    });
+
+    html += `</ul>`;
+    html += `<p>Batch Size: <strong>${batchSize} oz</strong><br />`;
+    html += `Target ABV: <strong>${currentABV.toFixed(1)}%</strong><br />`;
+    html += `Sugar: <strong>${sugarPercent.toFixed(1)}%</strong></p>`;
+
+    html += `<p><a href="${recipe.sourceUrl}" target="_blank">Source</a></p>`;
+    recipeDisplayEl.innerHTML = html;
+  }
+</script>
+</body>
+</html>
